@@ -1,0 +1,235 @@
+<div id="root">
+<h2 class="sr-only">Dashboard of your last 30 ranked Dota 2 matches plus a friend comparison: winrate, KDA, hero and lane breakdown</h2>
+<div id="status" style="font-size:14px;color:var(--text-secondary);padding:2rem 0;">Loading match data from OpenDota...</div>
+<div id="content" style="display:none;">
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:1.5rem;" id="metric-cards"></div>
+
+<div style="margin-bottom:2rem;">
+  <p style="font-size:14px;color:var(--text-secondary);margin:0 0 8px;">Win/loss by match (most recent on right)</p>
+  <div style="position:relative;width:100%;height:120px;">
+    <canvas id="streakChart" role="img" aria-label="Bar chart of win or loss for each of the last 30 ranked matches">Win/loss sequence</canvas>
+  </div>
+</div>
+
+<div style="margin-bottom:2rem;">
+  <p style="font-size:14px;color:var(--text-secondary);margin:0 0 8px;">KDA ratio trend over last 30 games</p>
+  <div style="position:relative;width:100%;height:240px;">
+    <canvas id="kdaChart" role="img" aria-label="Line chart of KDA ratio across last 30 ranked matches">KDA trend</canvas>
+  </div>
+</div>
+
+<div style="margin-bottom:2rem;">
+  <p style="font-size:14px;color:var(--text-secondary);margin:0 0 8px;">Winrate by hero (heroes played 2+ times)</p>
+  <div style="position:relative;width:100%;height:280px;">
+    <canvas id="heroChart" role="img" aria-label="Horizontal bar chart of winrate percentage by hero">Hero winrate</canvas>
+  </div>
+</div>
+
+<div style="margin-bottom:2.5rem;">
+  <p style="font-size:14px;color:var(--text-secondary);margin:0 0 8px;">Winrate by lane</p>
+  <div style="position:relative;width:100%;height:200px;">
+    <canvas id="laneChart" role="img" aria-label="Bar chart of winrate percentage by lane role">Lane winrate</canvas>
+  </div>
+</div>
+
+<div style="border-top:0.5px solid var(--border);padding-top:1.5rem;">
+  <h3 style="margin:0 0 1rem;">Friend comparison (last 30 ranked)</h3>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;" id="compare-cards"></div>
+</div>
+
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+(async function() {
+  const PLAYERS = [
+    { id: 129105279, label: 'You' },
+    { id: 1659509350, label: 'Friend' }
+  ];
+  const statusEl = document.getElementById('status');
+  const laneNames = {1:'Safe lane',2:'Mid lane',3:'Off lane',4:'Jungle',0:'Unknown'};
+
+  function computeStats(matches) {
+    const wins = matches.filter(m => (m.player_slot < 128) === m.radiant_win).length;
+    const losses = matches.length - wins;
+    let totalK=0, totalD=0, totalA=0;
+    matches.forEach(m => { totalK+=m.kills; totalD+=m.deaths; totalA+=m.assists; });
+    const avgKDA = totalD === 0 ? (totalK+totalA) : ((totalK+totalA)/totalD);
+    return {
+      games: matches.length, wins, losses,
+      winrate: matches.length ? (wins/matches.length*100) : 0,
+      avgK: matches.length ? totalK/matches.length : 0,
+      avgD: matches.length ? totalD/matches.length : 0,
+      avgA: matches.length ? totalA/matches.length : 0,
+      avgKDA
+    };
+  }
+
+  try {
+    const heroesRes = await fetch('https://api.opendota.com/api/heroes');
+    if (!heroesRes.ok) throw new Error('Heroes request failed');
+    const heroesArr = await heroesRes.json();
+    const heroMap = {};
+    heroesArr.forEach(h => heroMap[h.id] = h.localized_name);
+
+    const playerResults = await Promise.all(PLAYERS.map(async p => {
+      const res = await fetch(`https://api.opendota.com/api/players/${p.id}/matches?limit=30&lobby_type=7`);
+      if (!res.ok) throw new Error('Match request failed for ' + p.label);
+      const matches = await res.json();
+      return { ...p, matches };
+    }));
+
+    const me = playerResults[0];
+    if (!me.matches.length) {
+      statusEl.textContent = 'No ranked matches found for your account.';
+      return;
+    }
+
+    const chron = [...me.matches].reverse();
+    const myStats = computeStats(me.matches);
+    const recent5 = me.matches.slice(0,5).map(m => (m.player_slot<128)===m.radiant_win ? 'W' : 'L').join('');
+
+    const cards = [
+      {label:'Winrate (last 30)', value: myStats.winrate.toFixed(1)+'%'},
+      {label:'Record', value: myStats.wins+'W - '+myStats.losses+'L'},
+      {label:'Avg KDA ratio', value: myStats.avgKDA.toFixed(2)},
+      {label:'Avg K / D / A', value: myStats.avgK.toFixed(1)+' / '+myStats.avgD.toFixed(1)+' / '+myStats.avgA.toFixed(1)},
+      {label:'Last 5 games', value: recent5}
+    ];
+    document.getElementById('metric-cards').innerHTML = cards.map(c => `
+      <div style="background:var(--surface-1);border-radius:var(--radius);padding:1rem;">
+        <p style="font-size:13px;color:var(--text-secondary);margin:0 0 4px;">${c.label}</p>
+        <p style="font-size:24px;font-weight:500;margin:0;">${c.value}</p>
+      </div>`).join('');
+
+    const heroStats = {};
+    me.matches.forEach(m => {
+      const name = heroMap[m.hero_id] || ('Hero '+m.hero_id);
+      const win = (m.player_slot<128)===m.radiant_win;
+      if (!heroStats[name]) heroStats[name] = {w:0,l:0};
+      win ? heroStats[name].w++ : heroStats[name].l++;
+    });
+    const heroEntries = Object.entries(heroStats)
+      .map(([name,s]) => ({name, games:s.w+s.l, wr: s.w/(s.w+s.l)*100}))
+      .filter(h => h.games >= 2)
+      .sort((a,b) => b.games - a.games);
+
+    const laneStats = {};
+    me.matches.forEach(m => {
+      const lane = laneNames[m.lane_role] || 'Unknown';
+      const win = (m.player_slot<128)===m.radiant_win;
+      if (!laneStats[lane]) laneStats[lane] = {w:0,l:0};
+      win ? laneStats[lane].w++ : laneStats[lane].l++;
+    });
+    const laneEntries = Object.entries(laneStats)
+      .map(([name,s]) => ({name, games:s.w+s.l, wr: s.w/(s.w+s.l)*100}))
+      .sort((a,b) => b.games - a.games);
+
+    statusEl.style.display = 'none';
+    document.getElementById('content').style.display = 'block';
+
+    const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+    const winColor = '#1baf7a', lossColor = '#e34948';
+    const gridColor = isDark ? '#2c2c2a' : '#e1e0d9';
+    const textColor = isDark ? '#c3c2b7' : '#52514e';
+
+    new Chart(document.getElementById('streakChart'), {
+      type: 'bar',
+      data: {
+        labels: chron.map((m,i) => i+1),
+        datasets: [{
+          data: chron.map(m => (m.player_slot<128)===m.radiant_win ? 1 : -1),
+          backgroundColor: chron.map(m => (m.player_slot<128)===m.radiant_win ? winColor : lossColor),
+          borderRadius: 3, barPercentage: 0.85
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display:false }, tooltip: { callbacks: { label: (ctx) => ctx.raw>0?'Win':'Loss' } } },
+        scales: { x: { display:false }, y: { display:false, min:-1.2, max:1.2 } }
+      }
+    });
+
+    new Chart(document.getElementById('kdaChart'), {
+      type: 'line',
+      data: {
+        labels: chron.map((m,i) => i+1),
+        datasets: [{
+          label: 'KDA ratio',
+          data: chron.map(m => m.deaths===0 ? (m.kills+m.assists) : ((m.kills+m.assists)/m.deaths)),
+          borderColor: '#2a78d6', backgroundColor: 'rgba(42,120,214,0.1)',
+          fill: true, tension: 0.3, pointRadius: 3, pointBackgroundColor: '#2a78d6'
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display:false } },
+        scales: {
+          x: { title:{display:true,text:'Game # (chronological)',color:textColor}, grid:{display:false}, ticks:{color:textColor} },
+          y: { title:{display:true,text:'KDA ratio',color:textColor}, grid:{color:gridColor}, ticks:{color:textColor}, beginAtZero:true }
+        }
+      }
+    });
+
+    const heroHeight = Math.max(200, heroEntries.length*40+80);
+    document.getElementById('heroChart').parentElement.style.height = heroHeight+'px';
+    new Chart(document.getElementById('heroChart'), {
+      type: 'bar',
+      data: {
+        labels: heroEntries.map(h => h.name+' ('+h.games+')'),
+        datasets: [{ data: heroEntries.map(h => h.wr), backgroundColor: heroEntries.map(h => h.wr>=50 ? winColor : lossColor), borderRadius: 4 }]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display:false }, tooltip: { callbacks: { label: (ctx) => ctx.raw.toFixed(0)+'% winrate' } } },
+        scales: {
+          x: { min:0, max:100, grid:{color:gridColor}, ticks:{color:textColor, callback:(v)=>v+'%'} },
+          y: { grid:{display:false}, ticks:{color:textColor} }
+        }
+      }
+    });
+
+    new Chart(document.getElementById('laneChart'), {
+      type: 'bar',
+      data: {
+        labels: laneEntries.map(l => l.name+' ('+l.games+')'),
+        datasets: [{ data: laneEntries.map(l => l.wr), backgroundColor: laneEntries.map(l => l.wr>=50 ? winColor : lossColor), borderRadius: 4 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display:false }, tooltip: { callbacks: { label: (ctx) => ctx.raw.toFixed(0)+'% winrate' } } },
+        scales: {
+          x: { grid:{display:false}, ticks:{color:textColor} },
+          y: { min:0, max:100, grid:{color:gridColor}, ticks:{color:textColor, callback:(v)=>v+'%'} }
+        }
+      }
+    });
+
+    // Comparison cards
+    const compareHtml = playerResults.map(p => {
+      const s = computeStats(p.matches);
+      if (!p.matches.length) {
+        return `<div style="background:var(--surface-1);border-radius:12px;padding:1rem 1.25rem;">
+          <p style="font-weight:500;font-size:15px;margin:0 0 8px;">${p.label}</p>
+          <p style="font-size:13px;color:var(--text-secondary);margin:0;">No ranked match data found (private profile or no matches).</p>
+        </div>`;
+      }
+      return `<div style="background:var(--surface-1);border-radius:12px;padding:1rem 1.25rem;">
+        <p style="font-weight:500;font-size:15px;margin:0 0 10px;">${p.label}</p>
+        <table style="width:100%;font-size:13px;">
+          <tr><td style="color:var(--text-secondary);padding:3px 0;">Winrate</td><td style="text-align:right;padding:3px 0;">${s.winrate.toFixed(1)}%</td></tr>
+          <tr><td style="color:var(--text-secondary);padding:3px 0;">Record</td><td style="text-align:right;padding:3px 0;">${s.wins}W - ${s.losses}L</td></tr>
+          <tr><td style="color:var(--text-secondary);padding:3px 0;">Avg KDA ratio</td><td style="text-align:right;padding:3px 0;">${s.avgKDA.toFixed(2)}</td></tr>
+          <tr><td style="color:var(--text-secondary);padding:3px 0;">Avg K/D/A</td><td style="text-align:right;padding:3px 0;">${s.avgK.toFixed(1)} / ${s.avgD.toFixed(1)} / ${s.avgA.toFixed(1)}</td></tr>
+        </table>
+      </div>`;
+    }).join('');
+    document.getElementById('compare-cards').innerHTML = compareHtml;
+
+  } catch (err) {
+    statusEl.textContent = 'Could not load data from OpenDota (' + err.message + '). One of these profiles may be private — check "Expose Public Match Data" in Dota 2 settings.';
+  }
+})();
+</script>

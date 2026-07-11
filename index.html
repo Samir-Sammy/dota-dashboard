@@ -96,27 +96,14 @@
       <div class="chart-wrap" id="heroChartWrap"><canvas id="heroChart"></canvas></div>
     </div>
 
-    <div style="margin-bottom:2rem;">
-      <p class="section-label">Avg last hits per game by hero (2+ games)</p>
-      <div class="chart-wrap" id="lhChartWrap"><canvas id="lhChart"></canvas></div>
-    </div>
 
-    <div style="margin-bottom:2rem;">
-      <p class="section-label">Avg hero damage per game by hero (2+ games)</p>
-      <div class="chart-wrap" id="dmgChartWrap"><canvas id="dmgChart"></canvas></div>
-    </div>
-
-    <div style="margin-bottom:2rem;">
-      <p class="section-label">Avg net worth per game by hero (2+ games)</p>
-      <div class="chart-wrap" id="nwChartWrap"><canvas id="nwChart"></canvas></div>
-    </div>
 
   </div>
 </div>
 <script>
 (async function(){
   const PLAYERS = [
-    { id: 129105279, label: 'You' },
+    { id: 129105279, label: 'SammY-' },
     { id: 67428263,  label: 'Onaji' }
   ];
   const DEFAULT_PLAYER = 0;
@@ -369,9 +356,7 @@
       });
     }
 
-    buildHeroChart('lhChart','lhChartWrap', heroes,'avgLH','Avg Last Hits',(v)=>Math.round(v)+' LH');
-    buildHeroChart('dmgChart','dmgChartWrap',heroes,'avgDmg','Avg Damage',(v)=>Math.round(v/1000)+'k');
-    buildHeroChart('nwChart','nwChartWrap',  heroes,'avgNW','Avg Net Worth',(v)=>Math.round(v/1000)+'k');
+
   }
 
   // --- Load ---
@@ -395,7 +380,7 @@
       const stats = computeStats(p.enriched.slice(-DEFAULT_N));
       const btn = document.createElement('div');
       btn.className='player-card'+(idx===DEFAULT_PLAYER?' active':'');
-      btn.innerHTML=p.label+`<span class="badge">${stats.winrate.toFixed(0)}% WR</span>`;
+      btn.innerHTML=p.label;
       btn.addEventListener('click',()=>renderForPlayer(idx,activeN));
       selectorEl.appendChild(btn);
     });

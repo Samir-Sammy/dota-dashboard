@@ -67,7 +67,7 @@
     <div id="player-selector"></div>
 
     <div id="compare-section">
-      <h3>All players — ranked matches</h3>
+      <h3>All Players — Ranked Matches</h3>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;" id="compare-cards"></div>
     </div>
 
@@ -358,6 +358,22 @@
     }
 
 
+    // Compare panel — dynamic with filter
+    document.getElementById('compare-section').querySelector('h3').textContent = `All Players — Last ${n} Ranked Matches`;
+    document.getElementById('compare-cards').innerHTML = allPlayerData.map(p=>{
+      const s=computeStats(p.enriched.slice(-n));
+      if(!p.enriched.length) return `<div class="compare-card"><p style="font-weight:500;font-size:15px;margin:0 0 8px;">${p.label}</p><p style="font-size:13px;color:var(--text-secondary);">No ranked match data found.</p></div>`;
+      return `<div class="compare-card">
+        <p style="font-weight:500;font-size:15px;margin:0 0 10px;">${p.label}</p>
+        <table>
+          <tr><td style="color:var(--text-secondary);">Winrate</td><td style="text-align:right;">${s.winrate.toFixed(1)}%</td></tr>
+          <tr><td style="color:var(--text-secondary);">Record</td><td style="text-align:right;">${s.wins}W - ${s.losses}L</td></tr>
+          <tr><td style="color:var(--text-secondary);">Avg KDA</td><td style="text-align:right;">${s.avgKDA.toFixed(2)}</td></tr>
+          <tr><td style="color:var(--text-secondary);">Avg K/D/A</td><td style="text-align:right;">${s.avgK.toFixed(1)} / ${s.avgD.toFixed(1)} / ${s.avgA.toFixed(1)}</td></tr>
+        </table>
+      </div>`;
+    }).join('');
+
   }
 
   // --- Load ---
@@ -385,21 +401,6 @@
       btn.addEventListener('click',()=>renderForPlayer(idx,activeN));
       selectorEl.appendChild(btn);
     });
-
-    // Compare panel
-    document.getElementById('compare-cards').innerHTML = allPlayerData.map(p=>{
-      const s=computeStats(p.enriched);
-      if(!p.enriched.length) return `<div class="compare-card"><p style="font-weight:500;font-size:15px;margin:0 0 8px;">${p.label}</p><p style="font-size:13px;color:var(--text-secondary);">No ranked match data found.</p></div>`;
-      return `<div class="compare-card">
-        <p style="font-weight:500;font-size:15px;margin:0 0 10px;">${p.label}</p>
-        <table>
-          <tr><td style="color:var(--text-secondary);">Winrate</td><td style="text-align:right;">${s.winrate.toFixed(1)}%</td></tr>
-          <tr><td style="color:var(--text-secondary);">Record</td><td style="text-align:right;">${s.wins}W - ${s.losses}L</td></tr>
-          <tr><td style="color:var(--text-secondary);">Avg KDA</td><td style="text-align:right;">${s.avgKDA.toFixed(2)}</td></tr>
-          <tr><td style="color:var(--text-secondary);">Avg K/D/A</td><td style="text-align:right;">${s.avgK.toFixed(1)} / ${s.avgD.toFixed(1)} / ${s.avgA.toFixed(1)}</td></tr>
-        </table>
-      </div>`;
-    }).join('');
 
     // Game filter
     document.querySelectorAll('.filter-btn').forEach(btn=>{
